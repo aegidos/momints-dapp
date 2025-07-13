@@ -9,7 +9,3 @@
 [build.environment]
   NODE_VERSION = "18"
   NETLIFY_NEXT_PLUGIN_SKIP = "true"
-
-# Explicitly disable any plugins
-[[plugins]]
-  # No plugins
