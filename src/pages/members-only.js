@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useContractWrite, useWaitForTransaction } from 'wagmi';
 import MainLayout from '../components/MainLayout';
-import { getProofForAddress, validateProof } from '../utils/proofUtils';
+import { getProofForAddress } from '../utils/proofUtils'; // Import the existing function
 
 const CONTRACT_ADDRESS = '0x6b70b49748abe1191107f20a8f176d50f63050c1';
 const ABI = [
@@ -20,36 +20,59 @@ const MembersOnly = () => {
   const { isConnected, address } = useAccount();
   const [isLoading, setIsLoading] = useState(false);
   const [mintStatus, setMintStatus] = useState('');
-  const [txHash, setTxHash] = useState('');
   const [merkleProof, setMerkleProof] = useState(null);
   const [isWhitelisted, setIsWhitelisted] = useState(false);
+  const [mounted, setMounted] = useState(false); // Add mounted state
 
-  const { writeContract } = useWriteContract();
+  const { data, write } = useContractWrite({
+    address: CONTRACT_ADDRESS,
+    abi: ABI,
+    functionName: 'mint',
+  });
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
-    useWaitForTransactionReceipt({
-      hash: txHash,
+    useWaitForTransaction({
+      hash: data?.hash,
     });
 
-  // Check if user is whitelisted and generate merkle proof
+  // Set mounted to true after component mounts (client-side only)
   useEffect(() => {
-    const fetchProof = async () => {
-      if (address) {
-        const proof = await getProofForAddress(address);
-        setMerkleProof(proof);
-        setIsWhitelisted(!!proof && validateProof(proof));
-      }
-    };
+    setMounted(true);
+  }, []);
 
-    fetchProof();
-  }, [address]);
-
-  // Update status when transaction is confirmed - FIXED
+  // Check if user is whitelisted and get proof
   useEffect(() => {
-    if (isConfirmed && txHash && mintStatus && typeof mintStatus === 'string' && !mintStatus.includes('✅')) {
-      setMintStatus(`✅ NFT minted successfully! TX: ${txHash}`);
+    if (address && mounted) {
+      getProofForAddress(address).then(proof => {
+        if (proof) {
+          setIsWhitelisted(true);
+          setMerkleProof(proof);
+        } else {
+          setIsWhitelisted(false);
+          setMerkleProof(null);
+        }
+      });
     }
-  }, [isConfirmed, txHash, mintStatus]);
+  }, [address, mounted]);
+
+  // Update status when transaction is confirmed
+  useEffect(() => {
+    if (isConfirmed && data?.hash) {
+      setMintStatus(`✅ NFT minted successfully! TX: ${data.hash}`);
+    }
+  }, [isConfirmed, data?.hash]);
+
+  // Show loading state during hydration
+  if (!mounted) {
+    return (
+      <MainLayout>
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <h1>Loading...</h1>
+          <p>Please wait while we connect to your wallet.</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!isConnected) {
     return (
@@ -77,40 +100,21 @@ const MembersOnly = () => {
   }
 
   const handleMint = async () => {
-    if (!isConnected || !address) {
-      alert('Please connect your wallet');
+    if (!merkleProof) {
+      setMintStatus('❌ No valid proof available');
       return;
     }
 
     setIsLoading(true);
+    setMintStatus('Initiating mint transaction...');
 
     try {
-      // Get proof for the connected address
-      const userProof = await getProofForAddress(address);
-      
-      if (!userProof || !validateProof(userProof)) {
-        alert('Your address is not eligible for minting or proof is invalid');
-        return;
-      }
-
-      // Ensure proof is in correct format
-      const formattedProof = userProof.map(proof => 
-        proof.startsWith('0x') ? proof : `0x${proof}`
-      );
-
-      await writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: ABI,
-        functionName: 'mint',
-        args: [formattedProof],
-        gas: BigInt(3000000),
-        maxFeePerGas: BigInt(50000000000),
-        maxPriorityFeePerGas: BigInt(2000000000)
+      write({
+        args: [merkleProof],
       });
     } catch (error) {
-      console.error('Minting failed:', error);
-      alert(`Minting failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
+      console.error('Mint error:', error);
+      setMintStatus(`❌ Error: ${error.message}`);
       setIsLoading(false);
     }
   };
@@ -147,7 +151,7 @@ const MembersOnly = () => {
               ✅ Whitelist Status: Verified
             </p>
             <p style={{ fontSize: '0.9rem', color: '#888' }}>
-              Merkle proof generated: {merkleProof ? '✅' : '❌'}
+              Merkle proof: {merkleProof ? '✅ Ready' : '❌ Not found'}
             </p>
           </div>
           
@@ -190,9 +194,9 @@ const MembersOnly = () => {
             <p style={{ margin: 0, wordBreak: 'break-all' }}>
               {mintStatus}
             </p>
-            {txHash && (
+            {data?.hash && (
               <a 
-                href={`https://apechain.calderaexplorer.xyz/tx/${txHash}`}
+                href={`https://apechain.calderaexplorer.xyz/tx/${data.hash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -206,33 +210,6 @@ const MembersOnly = () => {
                 View on ApeChain Explorer
               </a>
             )}
-          </div>
-        )}
-
-        {/* Merkle Proof Debug Info */}
-        {merkleProof && (
-          <div style={{
-            marginTop: '40px',
-            padding: '20px',
-            background: 'linear-gradient(145deg, #2a2a2a, #1a1a1a)',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            textAlign: 'left'
-          }}>
-            <h3 style={{ marginBottom: '15px', color: '#4a9eff' }}>Debug Info:</h3>
-            <p style={{ fontSize: '0.8rem', color: '#ccc', marginBottom: '10px' }}>
-              <strong>Merkle Proof:</strong>
-            </p>
-            <pre style={{ 
-              fontSize: '0.7rem', 
-              color: '#888', 
-              overflowX: 'auto',
-              padding: '10px',
-              background: '#0a0a0a',
-              borderRadius: '4px'
-            }}>
-              {JSON.stringify(merkleProof, null, 2)}
-            </pre>
           </div>
         )}
       </div>
