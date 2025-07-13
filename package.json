@@ -1,0 +1,29 @@
+{
+  "name": "my-netlify-app",
+  "version": "1.0.0",
+  "description": "A Netlify application using React and Next.js with wallet integration.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "deploy": "netlify deploy"
+  },
+  "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.0.0",
+    "@tanstack/react-query": "^5.0.0",
+    "axios": "^1.6.0",
+    "merkletreejs": "^0.5.2",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "viem": "^2.0.0",
+    "wagmi": "^2.0.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^6.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
