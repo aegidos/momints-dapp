@@ -7,7 +7,7 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-  version = "4.37.4"  # Version compatible with Next.js 13.1.2
+  pinned_version = "4.37.4"  # Use pinned_version instead of version
 
 
 # Configure secrets scanning
