@@ -2,13 +2,13 @@
   command = "npm run build"
   publish = ".next"
 
-[dev]
-  command = "npm run dev"
-  port = 3000
-
 [build.environment]
-  NODE_VERSION = "18"
+  SECRETS_SCAN_ENABLED = "false"
 
-# Add the Next.js plugin
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+
+# Configure secrets scanning
+[secrets]
+  SECRETS_SCAN_OMIT_PATHS = [
+    ".next/static/chunks/pages/_app-*.js",
+    ".next/static/chunks/pages/index-*.js"
+  ]

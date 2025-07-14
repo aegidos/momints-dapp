@@ -4,10 +4,10 @@
   "description": "A Netlify application using React and Next.js with wallet integration.",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "deploy": "netlify deploy"
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"lint": "next lint"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^0.12.4",
