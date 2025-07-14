@@ -3,7 +3,11 @@
   publish = ".next"
 
 [build.environment]
-  SECRETS_SCAN_ENABLED = "false"
+  NODE_VERSION = "18"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+  version = "4.37.4"  # Version compatible with Next.js 13.1.2
 
 
 # Configure secrets scanning

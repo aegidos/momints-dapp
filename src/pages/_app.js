@@ -1,4 +1,4 @@
-import "../styles/globals.css";
+import '../styles/globals.css'  // Import global styles
 import "@rainbow-me/rainbowkit/styles.css";
 
 import { getDefaultWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
