@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useContractWrite, useWaitForTransaction } from 'wagmi';
+import { useAccount, useContractWrite, useWaitForTransaction, usePrepareContractWrite } from 'wagmi';
 import MainLayout from '../components/MainLayout';
 import { getProofForAddress } from '../utils/proofUtils';
-import { createWalletClient, custom } from 'viem';
 
 const CONTRACT_ADDRESS = '0x6b70b49748abe1191107f20a8f176d50f63050c1';
 const ABI = [
@@ -17,29 +16,7 @@ const ABI = [
   }
 ];
 
-// Define ApeChain configuration
-const apeChain = {
-  id: 33139,
-  name: 'ApeChain',
-  network: 'apechain',
-  nativeCurrency: {
-    name: 'APE',
-    symbol: 'APE',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://apechain.calderachain.xyz/http'],
-    },
-    public: {
-      http: ['https://apechain.calderachain.xyz/http'],
-    },
-  },
-  blockExplorers: {
-    default: { name: 'ApeChain Explorer', url: 'https://apechain.calderaexplorer.xyz/' },
-  },
-  testnet: false
-};
+// Keep ApeChain config for reference
 
 const MembersOnly = () => {
   const { isConnected, address } = useAccount();
@@ -51,12 +28,12 @@ const MembersOnly = () => {
   const [mounted, setMounted] = useState(false);
   const [txHash, setTxHash] = useState(null);
 
-  // Set mounted to true after component mounts (client-side only)
+  // Set mounted to true after component mounts
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Check if user is whitelisted and get proof
+  // Check if user is whitelisted
   useEffect(() => {
     if (address && mounted) {
       setIsLoading(true);
@@ -82,43 +59,47 @@ const MembersOnly = () => {
     }
   }, [address, mounted]);
 
-  const mintNFT = async () => {
-    if (!address || !merkleProof) return;
+  // Prepare the contract write operation
+  const { config } = usePrepareContractWrite({
+    address: CONTRACT_ADDRESS,
+    abi: ABI,
+    functionName: 'mint',
+    args: merkleProof ? [merkleProof] : undefined,
+    enabled: !!merkleProof,
+  });
 
-    try {
+  // Initialize the contract write hook
+  const { write, data, isLoading: isWriteLoading, isSuccess, error } = useContractWrite(config);
+
+  // Wait for transaction
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransaction({
+    hash: data?.hash,
+  });
+
+  // Update UI based on transaction status
+  useEffect(() => {
+    if (isWriteLoading || isConfirming) {
       setIsMinting(true);
-      setMintStatus('Initiating minting process...');
+      setMintStatus(isWriteLoading ? 'Please confirm in your wallet...' : 'Transaction submitted, waiting for confirmation...');
+    } else if (isConfirmed) {
+      setIsMinting(false);
+      setMintStatus('Success! Your NFT has been minted.');
+      setTxHash(data?.hash);
+    } else if (error) {
+      setIsMinting(false);
+      setMintStatus(`Error: ${error.message || 'Failed to mint'}`);
+    }
+  }, [isWriteLoading, isConfirming, isConfirmed, error, data?.hash]);
 
-      // Request account access
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-
-      // Create wallet client with connected account
-      const walletClient = createWalletClient({
-        account: address,
-        chain: apeChain,
-        transport: custom(window.ethereum)
-      });
-
-      setMintStatus('Sending transaction...');
-      
-      // Execute the mint transaction
-      const hash = await walletClient.writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: ABI,
-        functionName: 'mint',
-        args: [merkleProof],
-        gas: BigInt(3000000)
-      });
-
-      setTxHash(hash);
-      setMintStatus(`Transaction sent! Hash: ${hash}`);
-      
-      // You could add a function to check transaction status or fetch NFTs
-      // setTimeout(() => { fetchNFTs(); }, 2000);
-    } catch (error) {
-      console.error('Error minting NFT:', error);
-      setMintStatus(`Error: ${error.message}`);
-    } finally {
+  const mintNFT = () => {
+    if (!merkleProof || !write) return;
+    
+    try {
+      setMintStatus('Preparing transaction...');
+      write();
+    } catch (err) {
+      console.error('Error initiating mint:', err);
+      setMintStatus(`Error: ${err.message}`);
       setIsMinting(false);
     }
   };
@@ -150,42 +131,30 @@ const MembersOnly = () => {
                 </div>
                 
                 {isWhitelisted && (
-                  <div className="bg-white shadow-md rounded-lg p-6">
-                    <h2 className="text-xl font-semibold mb-4">Mint Your Exclusive NFT</h2>
-                    
-                    <div className="mb-4">
-                      <p className="text-gray-700">
-                        Connected wallet: <span className="font-medium">{address}</span>
-                      </p>
-                      <p className="text-gray-700">
-                        Merkle proof: <span className="font-medium">{merkleProof.join(', ')}</span>
-                      </p>
-                    </div>
-                    
-                    <button
-                      onClick={mintNFT}
-                      disabled={isMinting}
-                      className={`w-full py-3 rounded-lg font-bold transition-all flex items-center justify-center ${
-                        isMinting 
-                          ? 'bg-gray-400 cursor-not-allowed' 
-                          : 'bg-blue-600 hover:bg-blue-700'
-                      }`}
+                  <button
+                    onClick={mintNFT}
+                    disabled={isMinting || !write}
+                    className={`px-4 py-2 rounded font-semibold ${
+                      isMinting || !write
+                        ? 'bg-gray-300 cursor-not-allowed' 
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                  >
+                    {isMinting ? 'Minting...' : 'Mint NFT'}
+                  </button>
+                )}
+                
+                {txHash && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-600">Transaction Hash:</p>
+                    <a 
+                      href={`https://apechain.calderaexplorer.xyz/tx/${txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:underline break-all"
                     >
-                      {isMinting ? 'Minting...' : 'Mint NFT'}
-                    </button>
-                    
-                    {txHash && (
-                      <div className="mt-4 text-center">
-                        <a 
-                          href={`https://apechain.calderaexplorer.xyz/tx/${txHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-500 underline"
-                        >
-                          View Transaction on Explorer
-                        </a>
-                      </div>
-                    )}
+                      {txHash}
+                    </a>
                   </div>
                 )}
               </>
